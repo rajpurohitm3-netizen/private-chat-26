@@ -9,7 +9,11 @@ const STATIC_ASSETS = [
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(STATIC_ASSETS);
+      // Use cache.addAll with caution, if one fails the whole thing fails
+      // Better to wrap each in its own try/catch or use a more resilient approach
+      return Promise.allSettled(
+        STATIC_ASSETS.map(url => cache.add(url).catch(err => console.warn('Failed to cache:', url, err)))
+      );
     }).then(function() {
       return self.skipWaiting();
     })
@@ -35,14 +39,19 @@ self.addEventListener('fetch', function(event) {
   
   const url = new URL(event.request.url);
   
+  // Skip cross-origin requests
   if (url.origin !== self.location.origin) return;
   
+  // Skip API requests
   if (url.pathname.startsWith('/api/')) return;
+  
+  // Skip Next.js internal requests
+  if (url.pathname.startsWith('/_next/')) return;
 
   event.respondWith(
     fetch(event.request)
       .then(function(response) {
-        if (response.status === 200) {
+        if (response && response.status === 200 && response.type === 'basic') {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then(function(cache) {
             cache.put(event.request, responseClone);
@@ -51,7 +60,9 @@ self.addEventListener('fetch', function(event) {
         return response;
       })
       .catch(function() {
-        return caches.match(event.request);
+        return caches.match(event.request).then(response => {
+           return response || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        });
       })
   );
 });
@@ -59,7 +70,12 @@ self.addEventListener('fetch', function(event) {
 self.addEventListener('push', function(event) {
   if (!event.data) return;
 
-  const data = event.data.json();
+  let data;
+  try {
+    data = event.data.json();
+  } catch (e) {
+    data = { title: 'Chatify', body: event.data.text() };
+  }
   
   const options = {
     body: data.body || 'New message received',
@@ -88,14 +104,13 @@ self.addEventListener('notificationclick', function(event) {
 
   if (event.action === 'dismiss') return;
 
-  const urlToOpen = event.notification.data?.url || '/';
+  const urlToOpen = new URL(event.notification.data?.url || '/', self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(windowClients) {
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.navigate(urlToOpen);
+        if (client.url === urlToOpen && 'focus' in client) {
           return client.focus();
         }
       }

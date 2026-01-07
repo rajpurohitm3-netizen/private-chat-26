@@ -160,45 +160,26 @@ export default function Home() {
   }, [session, isApproved, otpRequired, otpVerified, pushSupported, pushPermission, pushSubscription]);
 
   const [keyError, setKeyError] = useState(false);
-  const [needsKeyReset, setNeedsKeyReset] = useState(false);
 
   async function handleKeySetup() {
     try {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("public_key")
-        .eq("id", session.user.id)
-        .single();
-
       const storedPrivKey = localStorage.getItem(`priv_key_${session.user.id}`);
-      
       if (storedPrivKey && storedPrivKey !== "undefined" && storedPrivKey !== "null") {
         try {
           const key = await importPrivateKey(storedPrivKey);
           setPrivateKey(key);
           setKeyError(false);
-          
-          // Verify if local key matches remote public key
-          if (profile?.public_key) {
-            const currentPubKey = await exportPublicKey(await generateKeyPair().then(kp => kp.publicKey)); // This is wrong, I need to derive pub from priv
-            // Actually, we can just check if we can decrypt a test message or just assume it's fine if it was stored together.
-          }
         } catch (e) {
-          console.error("Failed to import stored key", e);
-          setNeedsKeyReset(true);
-        }
-      } else {
-        if (profile?.public_key) {
-          // Public key exists but no private key locally
-          setNeedsKeyReset(true);
-        } else {
-          // New user, generate everything
+          console.error("Failed to import stored key, generating new one", e);
           await generateAndStoreNewKey();
         }
+      } else {
+        await generateAndStoreNewKey();
       }
     } catch (error) {
       console.error("Key setup failed:", error);
       setKeyError(true);
+      toast.error("Encryption key not found. Please refresh or regenerate.");
     }
   }
 
@@ -216,7 +197,6 @@ export default function Home() {
       username: session.user.email?.split("@")[0],
       updated_at: new Date().toISOString(),
     });
-    setNeedsKeyReset(false);
   }
 
   function handleOtpVerified() {
@@ -297,47 +277,6 @@ export default function Home() {
               className="px-12 py-4 rounded-2xl bg-gradient-to-r from-red-500/10 to-orange-500/10 border border-red-500/20 text-red-400 font-black text-[10px] uppercase tracking-[0.4em] hover:text-white hover:from-red-500/20 hover:to-orange-500/20 transition-all active:scale-95"
             >
               Terminate Uplink
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (session && needsKeyReset) {
-    return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#010101] p-8 text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/20 via-transparent to-purple-900/20 blur-[150px] opacity-30" />
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="z-10 space-y-8 max-w-md"
-        >
-          <div className="flex justify-center">
-            <div className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] backdrop-blur-3xl shadow-2xl">
-              <ShieldAlert className="w-12 h-12 text-amber-500" />
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            <h2 className="text-3xl font-black italic tracking-tighter text-white uppercase">Identity <span className="text-amber-500">Conflict</span></h2>
-            <p className="text-zinc-400 font-medium leading-relaxed text-sm">
-              Your encryption keys are missing on this device. You can't read old messages without your private key. Resetting keys will allow new messages but old ones will be lost.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            <button
-              onClick={() => generateAndStoreNewKey()}
-              className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-[0.4em] hover:bg-indigo-500 transition-all active:scale-95"
-            >
-              Reset & Initialize New Keys
-            </button>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 font-black text-[10px] uppercase tracking-[0.4em] hover:text-white transition-all"
-            >
-              Cancel & Logout
             </button>
           </div>
         </motion.div>

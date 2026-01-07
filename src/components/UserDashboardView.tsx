@@ -122,11 +122,9 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
     localStorage.setItem(`notifications_${session.user.id}`, JSON.stringify(notifications));
   }, [notifications, session.user.id]);
 
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(console.error);
-    }
-    fetchProfile();
+    useEffect(() => {
+      fetchProfile();
+
     fetchProfiles();
     fetchRecentChats();
     fetchBroadcasts();

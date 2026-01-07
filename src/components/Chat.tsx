@@ -132,34 +132,45 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
     try {
       if (!msg.encrypted_content) return msg.content || "";
       
-      // Try to parse as JSON first (encrypted packet)
       let packet;
       try {
         packet = JSON.parse(msg.encrypted_content);
       } catch (e) {
-        // Not a JSON, probably plain text or legacy
         return msg.encrypted_content;
       }
 
       if (!packet.iv || !packet.content || !packet.keys) return msg.encrypted_content;
       
-      // Try current user's key first
       let encryptedAESKey = packet.keys[session.user.id];
       
       if (!encryptedAESKey) {
-        // Log available keys to help debug
         const availableKeys = Object.keys(packet.keys);
         console.warn("Key not found for user", session.user.id, "Available keys:", availableKeys);
-        return "[Encrypted - Your key was reset]";
+        
+        if (msg.sender_id === session.user.id) {
+          encryptedAESKey = packet.keys[session.user.id];
+        } else if (msg.receiver_id === session.user.id) {
+          encryptedAESKey = packet.keys[session.user.id];
+        }
+        
+        if (!encryptedAESKey) {
+          return "[Encrypted - Key reset or missing]";
+        }
       }
       
-      const aesKey = await decryptAESKeyWithUserPrivateKey(encryptedAESKey, privateKey);
-      return await decryptWithAES(packet.content, packet.iv, aesKey);
+      try {
+        const aesKey = await decryptAESKeyWithUserPrivateKey(encryptedAESKey, privateKey);
+        return await decryptWithAES(packet.content, packet.iv, aesKey);
+      } catch (decryptionError) {
+        console.error("AES Decryption error:", decryptionError);
+        return "[Decryption Error - Incompatible Key]";
+      }
     } catch (e) {
-      console.error("Decryption failed:", e);
+      console.error("General Decryption failed:", e);
       return "[Decryption Error]";
     }
   };
+
 
   async function fetchMessages() {
     try {
