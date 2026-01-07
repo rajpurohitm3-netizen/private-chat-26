@@ -146,22 +146,11 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
       // Try current user's key first
       let encryptedAESKey = packet.keys[session.user.id];
       
-      // If not found, check if any key exists in the packet that we can use
       if (!encryptedAESKey) {
-        // For messages where this user is sender or receiver, the key should exist
+        // Log available keys to help debug
         const availableKeys = Object.keys(packet.keys);
         console.warn("Key not found for user", session.user.id, "Available keys:", availableKeys);
-        
-        // Check if we're the sender or receiver of this message
-        if (msg.sender_id === session.user.id) {
-          encryptedAESKey = packet.keys[session.user.id];
-        } else if (msg.receiver_id === session.user.id) {
-          encryptedAESKey = packet.keys[session.user.id];
-        }
-        
-        if (!encryptedAESKey) {
-          return "[Encrypted - Key Missing]";
-        }
+        return "[Encrypted - Your key was reset]";
       }
       
       const aesKey = await decryptAESKeyWithUserPrivateKey(encryptedAESKey, privateKey);
