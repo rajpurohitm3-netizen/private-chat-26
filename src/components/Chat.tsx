@@ -143,32 +143,18 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
 
       if (!packet.iv || !packet.content || !packet.keys) return msg.encrypted_content;
       
-      // Try current user's key first
+      // Try current user's key
       let encryptedAESKey = packet.keys[session.user.id];
       
-      // If not found, check if any key exists in the packet that we can use
       if (!encryptedAESKey) {
-        // For messages where this user is sender or receiver, the key should exist
-        const availableKeys = Object.keys(packet.keys);
-        console.warn("Key not found for user", session.user.id, "Available keys:", availableKeys);
-        
-        // Check if we're the sender or receiver of this message
-        if (msg.sender_id === session.user.id) {
-          encryptedAESKey = packet.keys[session.user.id];
-        } else if (msg.receiver_id === session.user.id) {
-          encryptedAESKey = packet.keys[session.user.id];
-        }
-        
-        if (!encryptedAESKey) {
-          return "[Encrypted - Key Missing]";
-        }
+        return "[Encrypted - Your key was reset]";
       }
       
       const aesKey = await decryptAESKeyWithUserPrivateKey(encryptedAESKey, privateKey);
       return await decryptWithAES(packet.content, packet.iv, aesKey);
     } catch (e) {
       console.error("Decryption failed:", e);
-      return "[Decryption Error]";
+      return "[Encrypted - Key reset or missing]";
     }
   };
 
@@ -234,9 +220,13 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
         if (payload.new.receiver_id === contactProfile.id) {
           setMessages(prev => {
             if (prev.find(m => m.id === payload.new.id)) return prev;
-            const decryptedContent = payload.new.decrypted_content || newMessage;
-            return [...prev, { ...payload.new, decrypted_content: decryptedContent }];
+            // For own messages, we already have the content in state from sendMessage,
+            // but for multi-device sync, we need to decrypt it.
+            return [...prev, payload.new]; // decryptMessageContent will be called in fetch or we should call it here
           });
+          // To be safe, re-fetch or decrypt here
+          const decrypted = await decryptMessageContent(payload.new);
+          setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, decrypted_content: decrypted } : m));
         }
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, async (payload) => {
