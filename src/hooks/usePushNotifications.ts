@@ -25,25 +25,24 @@ export function usePushNotifications(userId: string | null) {
     }
   }, []);
 
-    useEffect(() => {
-      if (!isSupported || !userId) return;
-  
-      const checkSubscription = async () => {
-        try {
-          const registration = await navigator.serviceWorker.ready;
-          const existingSub = await registration.pushManager.getSubscription();
-          if (existingSub) {
-            setSubscription(existingSub);
-            await saveSubscription(existingSub, userId);
-          }
-        } catch (error) {
-          console.error("Push subscription check failed:", error);
-        }
-      };
-  
-      checkSubscription();
-    }, [isSupported, userId]);
+  useEffect(() => {
+    if (!isSupported || !userId) return;
 
+    const registerServiceWorker = async () => {
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js");
+        const existingSub = await registration.pushManager.getSubscription();
+        if (existingSub) {
+          setSubscription(existingSub);
+          await saveSubscription(existingSub, userId);
+        }
+      } catch (error) {
+        console.error("Service worker registration failed:", error);
+      }
+    };
+
+    registerServiceWorker();
+  }, [isSupported, userId]);
 
   const requestPermission = async () => {
     if (!isSupported || !userId) return false;
