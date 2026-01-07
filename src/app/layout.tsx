@@ -24,6 +24,8 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
+import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
@@ -35,6 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body>
+        <ServiceWorkerRegistration />
         <Script
           id="orchids-browser-logs"
           src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/scripts/orchids-browser-logs.js"

@@ -1,15 +1,16 @@
 const CACHE_NAME = 'chatify-v1';
 const STATIC_ASSETS = [
   '/',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
+  '/manifest.json'
 ];
 
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(STATIC_ASSETS);
+      // Use a more robust approach to adding assets
+      return Promise.allSettled(
+        STATIC_ASSETS.map(url => cache.add(url))
+      );
     }).then(function() {
       return self.skipWaiting();
     })
@@ -37,7 +38,8 @@ self.addEventListener('fetch', function(event) {
   
   if (url.origin !== self.location.origin) return;
   
-  if (url.pathname.startsWith('/api/')) return;
+  // Skip caching for API and browser-sync/HMR stuff
+  if (url.pathname.startsWith('/api/') || url.pathname.includes('_next') || url.pathname.includes('browser-sync')) return;
 
   event.respondWith(
     fetch(event.request)
@@ -59,7 +61,12 @@ self.addEventListener('fetch', function(event) {
 self.addEventListener('push', function(event) {
   if (!event.data) return;
 
-  const data = event.data.json();
+  let data;
+  try {
+    data = event.data.json();
+  } catch (e) {
+    data = { title: 'Chatify', body: event.data.text() };
+  }
   
   const options = {
     body: data.body || 'New message received',

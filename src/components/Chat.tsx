@@ -132,29 +132,36 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
     try {
       if (!msg.encrypted_content) return msg.content || "";
       
-      // Try to parse as JSON first (encrypted packet)
       let packet;
       try {
         packet = JSON.parse(msg.encrypted_content);
       } catch (e) {
-        // Not a JSON, probably plain text or legacy
         return msg.encrypted_content;
       }
 
       if (!packet.iv || !packet.content || !packet.keys) return msg.encrypted_content;
       
-      // Try current user's key
       let encryptedAESKey = packet.keys[session.user.id];
       
       if (!encryptedAESKey) {
-        return "[Encrypted - Your key was reset]";
+        // Handle cases where the key might be missing for this user
+        // (e.g. they were added to the chat later, or it's a legacy message)
+        const availableKeys = Object.keys(packet.keys);
+        console.warn("Key not found for user in packet", session.user.id, "Available keys:", availableKeys);
+        
+        return "[Encrypted - Your key missing]";
       }
       
-      const aesKey = await decryptAESKeyWithUserPrivateKey(encryptedAESKey, privateKey);
-      return await decryptWithAES(packet.content, packet.iv, aesKey);
+      try {
+        const aesKey = await decryptAESKeyWithUserPrivateKey(encryptedAESKey, privateKey);
+        return await decryptWithAES(packet.content, packet.iv, aesKey);
+      } catch (cryptoError) {
+        console.error("RSA Decryption failed - key mismatch?", cryptoError);
+        return "[Encrypted - Key reset or missing]";
+      }
     } catch (e) {
-      console.error("Decryption failed:", e);
-      return "[Encrypted - Key reset or missing]";
+      console.error("Overall decryption failed:", e);
+      return "[Decryption Error]";
     }
   };
 
@@ -167,12 +174,7 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
         .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${contactProfile.id}),and(sender_id.eq.${contactProfile.id},receiver_id.eq.${session.user.id})`)
         .order("created_at", { ascending: true });
       
-      if (error) {
-        console.error("Supabase fetch error:", error);
-        toast.error("Failed to load messages");
-        setLoading(false);
-        return;
-      }
+      if (error) throw error;
 
       const decryptedMessages = await Promise.all(
         (data || []).map(async msg => ({ 
@@ -188,8 +190,8 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
         await supabase.from("messages").update({ is_viewed: true, viewed_at: new Date().toISOString() }).in("id", unviewed.map(m => m.id));
       }
     } catch (err) {
-      console.error("Internal fetch error:", err);
-      toast.error("An internal error occurred while fetching messages");
+      console.error("Fetch error:", err);
+      toast.error("Connection issue: failed to load messages");
     } finally {
       setLoading(false);
     }
@@ -199,42 +201,35 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
     return supabase.channel(`chat-${contactProfile.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `receiver_id=eq.${session.user.id}` }, async (payload) => {
         if (payload.new.sender_id === contactProfile.id) {
-          // Small delay to ensure message is fully committed
-          await new Promise(resolve => setTimeout(resolve, 100));
           const decryptedContent = await decryptMessageContent(payload.new);
           const msg = { ...payload.new, decrypted_content: decryptedContent };
+          
           setMessages(prev => {
-            // Avoid duplicates
             if (prev.find(m => m.id === payload.new.id)) return prev;
             return [...prev, msg];
           });
+          
           await supabase.from("messages").update({ is_delivered: true, delivered_at: new Date().toISOString() }).eq("id", payload.new.id);
+          
           if (payload.new.media_type === 'snapshot') {
-            toast.info("Snapshot Received");
+            toast.info("New snapshot from " + contactProfile.username);
             setShowSnapshotView(msg);
           }
         }
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `sender_id=eq.${session.user.id}` }, async (payload) => {
-        // Handle own sent messages coming back from realtime (for multi-device sync)
         if (payload.new.receiver_id === contactProfile.id) {
           setMessages(prev => {
             if (prev.find(m => m.id === payload.new.id)) return prev;
-            // For own messages, we already have the content in state from sendMessage,
-            // but for multi-device sync, we need to decrypt it.
-            return [...prev, payload.new]; // decryptMessageContent will be called in fetch or we should call it here
+            return [...prev, { ...payload.new, decrypted_content: newMessage || "Sent" }];
           });
-          // To be safe, re-fetch or decrypt here
-          const decrypted = await decryptMessageContent(payload.new);
-          setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, decrypted_content: decrypted } : m));
         }
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, async (payload) => {
         if (payload.new.sender_id === contactProfile.id || payload.new.receiver_id === contactProfile.id) {
           setMessages(prev => prev.map(m => {
             if (m.id === payload.new.id) {
-              // Keep existing decrypted content if available
-              return { ...payload.new, decrypted_content: m.decrypted_content || payload.new.decrypted_content };
+              return { ...payload.new, decrypted_content: m.decrypted_content };
             }
             return m;
           }));
@@ -320,6 +315,14 @@ export function Chat({ session, privateKey, initialContact, isPartnerOnline, onB
       setMessages(prev => [...prev, sentMsg]);
       setNewMessage("");
       setShowOptions(false);
+
+      // Send push notification to partner
+      sendPushNotification(
+        contactProfile.id,
+        `New Message from ${session.user.email?.split("@")[0]}`,
+        mediaType === "text" ? contentToEncrypt : `Sent a ${mediaType}`,
+        session.user.id
+      ).catch(err => console.error("Push notification failed:", err));
     } catch (e: any) { 
       console.error("Encryption/Send failed:", e);
       toast.error("Encryption failed: " + (e.message || "Unknown error")); 

@@ -123,9 +123,6 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
   }, [notifications, session.user.id]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(console.error);
-    }
     fetchProfile();
     fetchProfiles();
     fetchRecentChats();

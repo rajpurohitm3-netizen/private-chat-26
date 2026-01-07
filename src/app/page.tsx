@@ -160,7 +160,6 @@ export default function Home() {
   }, [session, isApproved, otpRequired, otpVerified, pushSupported, pushPermission, pushSubscription]);
 
   const [keyError, setKeyError] = useState(false);
-  const [showKeyConflict, setShowKeyConflict] = useState(false);
 
   async function handleKeySetup() {
     try {
@@ -171,21 +170,16 @@ export default function Home() {
           setPrivateKey(key);
           setKeyError(false);
         } catch (e) {
-          console.error("Failed to import stored key", e);
-          setShowKeyConflict(true);
-        }
-      } else {
-        // Check if user already has a public key in DB
-        const { data } = await supabase.from("profiles").select("public_key").eq("id", session.user.id).single();
-        if (data?.public_key) {
-          setShowKeyConflict(true);
-        } else {
+          console.error("Failed to import stored key, generating new one", e);
           await generateAndStoreNewKey();
         }
+      } else {
+        await generateAndStoreNewKey();
       }
     } catch (error) {
       console.error("Key setup failed:", error);
       setKeyError(true);
+      toast.error("Encryption key not found. Please refresh or regenerate.");
     }
   }
 
@@ -203,7 +197,6 @@ export default function Home() {
       username: session.user.email?.split("@")[0],
       updated_at: new Date().toISOString(),
     });
-    setShowKeyConflict(false);
   }
 
   function handleOtpVerified() {
@@ -251,45 +244,6 @@ export default function Home() {
       </div>
     </div>
   );
-
-  if (session && showKeyConflict) {
-    return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#010101] p-8 text-center relative overflow-hidden">
-        <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-indigo-900/15 blur-[200px] rounded-full pointer-events-none" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] bg-purple-900/10 blur-[200px] rounded-full pointer-events-none" />
-        
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="z-10 space-y-10 max-w-md">
-          <div className="flex justify-center">
-            <div className="p-8 bg-indigo-500/10 border border-indigo-500/20 rounded-[2.5rem] backdrop-blur-3xl shadow-2xl">
-              <ShieldAlert className="w-12 h-12 text-indigo-400" />
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            <h2 className="text-4xl font-black italic tracking-tighter text-white uppercase">Identity <span className="text-indigo-500">Conflict</span></h2>
-            <p className="text-zinc-500 font-medium leading-relaxed tracking-wider text-xs uppercase">
-              Secure keys for this device were not found. Resetting keys will allow you to send new messages but <span className="text-indigo-400">old encrypted messages will be lost forever</span>.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            <button
-              onClick={() => generateAndStoreNewKey()}
-              className="px-10 py-4 rounded-2xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-[0.3em] hover:bg-indigo-500 transition-all active:scale-95 shadow-xl shadow-indigo-600/20"
-            >
-              Initialize New Keys
-            </button>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="px-10 py-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 font-black text-[10px] uppercase tracking-[0.3em] hover:text-white hover:bg-white/10 transition-all"
-            >
-              Sign Out & Try Again
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
 
   if (session && isApproved === false) {
     return (
