@@ -30,14 +30,14 @@ export function usePushNotifications(userId: string | null) {
 
     const registerServiceWorker = async () => {
       try {
-        const registration = await navigator.serviceWorker.ready;
+        const registration = await navigator.serviceWorker.register("/sw.js");
         const existingSub = await registration.pushManager.getSubscription();
         if (existingSub) {
           setSubscription(existingSub);
           await saveSubscription(existingSub, userId);
         }
       } catch (error) {
-        console.error("Service worker ready failed:", error);
+        console.error("Service worker registration failed:", error);
       }
     };
 

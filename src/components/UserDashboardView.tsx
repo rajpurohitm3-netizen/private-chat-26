@@ -123,6 +123,9 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
   }, [notifications, session.user.id]);
 
   useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(console.error);
+    }
     fetchProfile();
     fetchProfiles();
     fetchRecentChats();
@@ -908,7 +911,7 @@ const advancedFeatures = [
                       <h2 className="text-2xl font-black uppercase italic">Signal Channels</h2>
                       <div className="relative group w-full md:w-80">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                        <input placeholder="Search friends..." value={chatSearchQuery} onChange={(e) => setChatSearchQuery(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3 pl-12 pr-6 text-sm outline-none focus:border-indigo-500/50 transition-all placeholder:text-white/10" />
+                        <input placeholder="Search friends..." value={chatSearchQuery} onChange={(e) => setChatSearchQuery(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3_pl-12_pr-6 text-sm outline-none focus:border-indigo-500/50 transition-all placeholder:text-white/10" />
                       </div>
                     </div>
                     

@@ -85,32 +85,26 @@ export function VideoCall({
   }, [isConnecting]);
 
   const encryptSignal = async (data: any) => {
-    if (!partnerPublicKeyRef.current) {
-      if (contact.public_key) {
-        partnerPublicKeyRef.current = await importPublicKey(contact.public_key);
-      } else {
-        return JSON.stringify(data);
-      }
-    }
-    try {
-      const encrypted = await encryptMessage(JSON.stringify(data), partnerPublicKeyRef.current);
-      return JSON.stringify({ encrypted });
-    } catch (e) {
-      console.error("Encryption failed", e);
-      return JSON.stringify(data);
-    }
+    return JSON.stringify(data);
   };
 
   const decryptSignal = async (signalStr: string) => {
     try {
       const parsed = JSON.parse(signalStr);
       if (parsed.encrypted) {
-        const decrypted = await decryptMessage(parsed.encrypted, privateKey);
-        return JSON.parse(decrypted);
+        try {
+          // Try to decrypt for backward compatibility if privateKey exists
+          if (privateKey) {
+            const decrypted = await decryptMessage(parsed.encrypted, privateKey);
+            return JSON.parse(decrypted);
+          }
+        } catch (e) {
+          console.error("Decryption failed", e);
+        }
       }
       return parsed;
     } catch (e) {
-      console.error("Decryption failed", e);
+      console.error("Signal parsing failed", e);
       return JSON.parse(signalStr);
     }
   };

@@ -146,7 +146,6 @@ export default function Home() {
 
   useEffect(() => {
     if (session?.user && isApproved && (!otpRequired || otpVerified)) {
-      handleKeySetup();
       if (pushSupported && pushPermission === "default" && !pushSubscription) {
         setTimeout(() => {
           requestPushPermission().then((granted) => {
@@ -158,46 +157,6 @@ export default function Home() {
       }
     }
   }, [session, isApproved, otpRequired, otpVerified, pushSupported, pushPermission, pushSubscription]);
-
-  const [keyError, setKeyError] = useState(false);
-
-  async function handleKeySetup() {
-    try {
-      const storedPrivKey = localStorage.getItem(`priv_key_${session.user.id}`);
-      if (storedPrivKey && storedPrivKey !== "undefined" && storedPrivKey !== "null") {
-        try {
-          const key = await importPrivateKey(storedPrivKey);
-          setPrivateKey(key);
-          setKeyError(false);
-        } catch (e) {
-          console.error("Failed to import stored key, generating new one", e);
-          await generateAndStoreNewKey();
-        }
-      } else {
-        await generateAndStoreNewKey();
-      }
-    } catch (error) {
-      console.error("Key setup failed:", error);
-      setKeyError(true);
-      toast.error("Encryption key not found. Please refresh or regenerate.");
-    }
-  }
-
-  async function generateAndStoreNewKey() {
-    const keyPair = await generateKeyPair();
-    const pubKeyBase64 = await exportPublicKey(keyPair.publicKey);
-    const privKeyBase64 = await exportPrivateKey(keyPair.privateKey);
-    
-    localStorage.setItem(`priv_key_${session.user.id}`, privKeyBase64);
-    setPrivateKey(keyPair.privateKey);
-
-    await supabase.from("profiles").upsert({
-      id: session.user.id,
-      public_key: pubKeyBase64,
-      username: session.user.email?.split("@")[0],
-      updated_at: new Date().toISOString(),
-    });
-  }
 
   function handleOtpVerified() {
     sessionStorage.setItem(`otp_verified_${session.user.id}`, 'true');
@@ -314,7 +273,7 @@ export default function Home() {
             exit={{ opacity: 0, y: -40 }}
             className="relative z-10 min-h-screen flex flex-col lg:flex-row"
           >
-            {/* Left Section: Visual & Branding */}
+            {/* ... left section ... */}
             <div className="hidden lg:flex w-1/2 flex-col justify-between p-16 relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/20 via-transparent to-purple-950/20" />
                 
@@ -481,17 +440,15 @@ export default function Home() {
             </div>
           </motion.div>
         ) : (
-          privateKey && (
-              <motion.div
-                key="dashboard"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 1 }}
-                className="h-full"
-              >
-                <UserDashboardView session={session} privateKey={privateKey} />
-              </motion.div>
-            )
+          <motion.div
+            key="dashboard"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1 }}
+            className="h-full"
+          >
+            <UserDashboardView session={session} privateKey={null as any} />
+          </motion.div>
         )}
       </AnimatePresence>
       </main>
